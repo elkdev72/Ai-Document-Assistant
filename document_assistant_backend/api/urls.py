@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import UploadDocumentView, GetDocumentView, ImproveDocumentView, UserRegistrationView, UserLoginView
+from .views import UploadDocumentView, GetDocumentView, ImproveDocumentView, UserRegistrationView, UserLoginView,ExportDocumentView
 
 urlpatterns = [
     path('upload/', UploadDocumentView.as_view(), name='upload_document'),
@@ -7,4 +7,6 @@ urlpatterns = [
     path('documents/<int:id>/improve/', ImproveDocumentView.as_view(), name='improve_document'),
     path('register/', UserRegistrationView.as_view(), name='register'),
     path('login/', UserLoginView.as_view(), name='login'),
+    path('documents/<int:id>/export/<str:format_type>/', ExportDocumentView.as_view(), name='export_document'),
+
 ]
