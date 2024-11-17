@@ -13,16 +13,23 @@ from django.http import HttpResponse
 from django.core.files.storage import default_storage
 from docx import Document as DocxDocument
 # .......................................................
-import spacy
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.core.files.storage import default_storage
-from .models import Document, Content
 from .serializers import DocumentSerializer, ContentSerializer
 from rest_framework.permissions import IsAuthenticated
 import logging
 import language_tool_python
+
+from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.permissions import AllowAny
+from rest_framework.authtoken.models import Token
+
+from django.contrib.auth.models import User
+
+
+
+
+
+
+
 
 logger = logging.getLogger(__name__)
 nlp = spacy.load("en_core_web_sm")
@@ -98,20 +105,31 @@ class GetDocumentView(APIView):
             return Response({'error': 'Document not found'}, status=status.HTTP_404_NOT_FOUND)
         except Content.DoesNotExist:
             return Response({'error': 'Content not found'}, status=status.HTTP_404_NOT_FOUND)
-            
+
+
+
+
+
+
+import spacy
+import language_tool_python
+from .nlp_utils import nlp, tool
+
 class ImproveDocumentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def improve_text(self, text):
-        # Initialize LanguageTool
-        tool = language_tool_python.LanguageTool('en-US')
+        # Tokenize and analyze text with spaCy
+        doc = nlp(text)
+        
+        # Initialize LanguageTool for grammar checking
         matches = tool.check(text)
         improved_text = text
 
-        # Create suggestions and apply them directly
         suggestions = []
         offset = 0  # Track the offset due to replacements
 
+        # Apply grammar suggestions from LanguageTool
         for match in matches:
             suggestion = {
                 "text": match.context,
@@ -129,6 +147,40 @@ class ImproveDocumentView(APIView):
                 # Replace the text and update the offset
                 improved_text = improved_text[:start] + replacement + improved_text[end:]
                 offset += len(replacement) - match.errorLength
+
+        # Use spaCy to further improve clarity, style, and structure
+        for sentence in doc.sents:
+            tokens = [token.text for token in sentence]
+            entities = [(ent.text, ent.label_) for ent in sentence.ents]
+
+            # Example: Rephrase sentences with passive voice or improve clarity
+            if any(token.dep_ == "auxpass" for token in sentence):
+                passive_suggestion = f"Consider rephrasing '{sentence.text}' to active voice."
+                suggestions.append({
+                    "text": sentence.text,
+                    "error": "Passive voice detected",
+                    "suggestions": [passive_suggestion]
+                })
+
+            # Example: Detect and suggest correction for overly complex sentences
+            if len(tokens) > 20:
+                clarity_suggestion = f"Consider simplifying the sentence: '{sentence.text}'"
+                suggestions.append({
+                    "text": sentence.text,
+                    "error": "Complex sentence",
+                    "suggestions": [clarity_suggestion]
+                })
+
+            # Example: Check for redundant expressions (e.g., "advance planning")
+            redundant_phrases = ["advance planning", "free gift", "future plans"]
+            for phrase in redundant_phrases:
+                if phrase in sentence.text.lower():
+                    redundancy_suggestion = f"Remove redundant phrase '{phrase}'"
+                    suggestions.append({
+                        "text": sentence.text,
+                        "error": "Redundant expression",
+                        "suggestions": [redundancy_suggestion]
+                    })
 
         return improved_text, suggestions
 
@@ -150,14 +202,11 @@ class ImproveDocumentView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
 
-from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework.permissions import AllowAny
-from rest_framework.authtoken.models import Token
 
-from django.contrib.auth.models import User
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
+
+
+
+
 
 class UserRegistrationView(APIView):
     permission_classes = [AllowAny]  # This makes the endpoint accessible to all
